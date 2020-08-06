@@ -9,34 +9,58 @@ import gzip
 
 parser = ArgumentParser()
 
-parser.add_argument('--location', dest= 'location', default= 'Brazil', type= str,
-                    help= 'Brazil, US, World')
+parser.add_argument('--location',
+                    dest='location',
+                    default='Brazil',
+                    type=str,
+                    help='Brazil,US,World')
 
-                  
-parser.add_argument('--state_or_city', dest= 'state_or_city', default= 'state', type= str,
-                    help= 'Brazil: state or city')
+parser.add_argument('--state_or_city',
+                    dest='state_or_city',
+                    default='state',
+                    type=str,
+                    help='Brazil: state or city')
 
-parser.add_argument('--not_last_date', dest= 'not_last_date', default= False, type= bool,
-                    help= 'Run for the last date from the data frame')
+parser.add_argument('--not_last_date',
+                    dest='not_last_date',
+                    default=False,
+                    type=bool,
+                    help='Run for the last date from the data frame')
 
-parser.add_argument('--date', dest= 'until_date', default= '2020-05-05', type= str,
-                    help= 'Set --not_last_date to use it')
+parser.add_argument('--date',
+                    dest='until_date',
+                    default='2020-05-05',
+                    type=str,
+                    help='Set --not_last_date to use it')
 
-parser.add_argument('--show_plot', dest= 'show_plot', default= False, type= bool,
-                    help= 'Show plot for each location')
+parser.add_argument('--show_plot',
+                    dest='show_plot',
+                    default=False,
+                    type=bool,
+                    help='Show plot for each location')
 
-parser.add_argument('--output_name', dest= 'output_name', default= 'output_new.csv', type= str,
-                    help= 'CSV file: output.csv')
+parser.add_argument('--output_name',
+                    dest='output_name',
+                    default='output_new.csv',
+                    type=str,
+                    help='CSV file: output.csv')
 
-parser.add_argument('--slice', dest= 'slice', default= False, type= bool,
-                    help= 'Set true and use --slice_list')
+parser.add_argument('--slice',
+                    dest='slice',
+                    default=False,
+                    type=bool,
+                    help='Set true and use --slice_list')
 
+parser.add_argument('--slice_name',
+                    dest='slice_list',
+                    nargs='+',
+                    default=[])
 
-parser.add_argument('--slice_name', dest= 'slice_list', nargs='+', default=[])
-
-parser.add_argument('--save_figdata', dest= 'save_figdata', default= False, type= bool,
-                    help= 'Save figure data')
-
+parser.add_argument('--save_figdata',
+                    dest='save_figdata',
+                    default=False,
+                    type=bool,
+                    help='Save figure data')
 
 args = parser.parse_args()
 
@@ -53,69 +77,52 @@ if not os.path.exists(path_output):
     os.makedirs(path_output)
 
 
-####### Defining useful functions
+# Defining useful functions
 
-### Function to download data
+# Function to download data
 def download_df(url, filename):
     with open(filename, 'wb') as f:
         r = requests.get(url)
         f.write(r.content)
 
-    #return pd.read_csv(filename)
+# Function to calculate rates
 
-### Function to calculate rates
+
 def delta(df_conf):
     list_ = []
     list_.append(0)
     for j in range(len(df_conf) - 1):
         list_.append(df_conf[j+1] - df_conf[j])
-    return list_  
+    return list_
 
-####### Downloading data
+# Downloading data
+
 
 print('Loading data for calculating growth rate')
 
 if args.location == 'Brazil':
-
-    ###################################
-
     url = "https://data.brasil.io/dataset/covid19/caso_full.csv.gz"
-    filename =  path_data + '/caso_full.csv.gz'
-    
+    filename = path_data + '/caso_full.csv.gz'
+
     download_df(url, filename)
-    #############################################
-    #with gzip.open(filename) as f:
-    #    df = pd.read_csv(f)
-    
-    ###################################
-    #filename = 'data/caso_full.csv.gz'
 
     with gzip.open(filename) as f:
         df = pd.read_csv(f)
 
-    #df = pd.read_csv(filename)
-
-    
-    
     cases_key = 'last_available_confirmed'
-    #cases_key = 'confirmed'
 
-    #df = download_df(url, filename)
-
-    #print('df = ', df)
-    #df = pd.read_csv(filename)
-    df = df[ df['place_type'] == args.state_or_city]
+    df = df[df['place_type'] == args.state_or_city]
 
     if args.state_or_city == 'state':
         df['city_ibge_code'] = df['city_ibge_code'].astype(int)
-        df = df.drop(columns= ['city'])
+        df = df.drop(columns=['city'])
         loc_key = 'state'
 
     else:
         df = df.dropna()
         df['city_ibge_code'] = df['city_ibge_code'].astype(int)
-        loc_key  = 'city_ibge_code'
-        args.slice_list= list(map(int, args.slice_list))
+        loc_key = 'city_ibge_code'
+        args.slice_list = list(map(int, args.slice_list))
 
 
 elif args.location == 'World':
@@ -126,29 +133,28 @@ elif args.location == 'World':
     df = download_df(url, filename)
 
 else:
-    url = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+    url = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/"
+    url = url+"us-states.csv"
     filename = path_data + '/US_states' + '.csv'
     cases_key = 'cases'
     loc_key = 'state'
     df = download_df(url, filename)
-
 
 if args.slice:
     locs_ = np.array(args.slice_list)
 else:
     locs_ = df[loc_key].unique()
 
-
 print('Running')
 
 results_ = []
 
-### EWM
+# EWM
 alpha = 30.
 alpha2 = 7.
 alpha3 = 5.
 
-### Classification threshold
+# Classification threshold
 # Cases
 CASES_threshold = 50
 # Normalized growth rate (%)
@@ -159,10 +165,9 @@ GROWTH_ACCEL_threshold = 0.01
 
 for locs in locs_:
 
-    df_ = df[ df[loc_key] == locs].sort_values(by='date').set_index('date')
-    df_ =  df_ [ df_[cases_key]  > 0]
+    df_ = df[df[loc_key] == locs].sort_values(by='date').set_index('date')
+    df_ = df_[df_[cases_key] > 0]
     df_.index = pd.to_datetime(df_.index)
-
 
     if args.state_or_city == 'city':
         cities = df_['city'][0]
@@ -174,22 +179,19 @@ for locs in locs_:
     df_['growth_rate_'] = delta(df_[cases_key])
 
     # Exponential weight
-    df_['growth_rate'] = df_['growth_rate_'].ewm(com= alpha).mean()
+    df_['growth_rate'] = df_['growth_rate_'].ewm(com=alpha).mean()
 
     # Rate
     df_['growth_accel_'] = delta(df_['growth_rate'])
 
     # Exponential weight
-    df_['growth_accel'] = df_['growth_accel_'].ewm(com= alpha2).mean()
+    df_['growth_accel'] = df_['growth_accel_'].ewm(com=alpha2).mean()
 
     # Rate
     df_['growth_accel_rate_'] = delta(df_['growth_accel'])
 
     # Exponential weight
-    df_['growth_accel_rate'] = df_['growth_accel_rate_'].ewm(com= alpha3).mean()
-
-
-    ###################################################
+    df_['growth_accel_rate'] = df_['growth_accel_rate_'].ewm(com=alpha3).mean()
 
     # Normalized 14 days quantities
     df_['growth_rate_NORM_(14)'] = np.nan
@@ -197,10 +199,10 @@ for locs in locs_:
     df_['growth_accel_rate_NORM_(14)'] = np.nan
 
     for j in range(14, len(df_)):
-        
-        df_['growth_rate_NORM_(14)'][j] = df_['growth_rate'][j]  / (df_['growth_rate'][j-14:j]).sum()
-        df_['growth_accel_NORM_(14)'][j] = df_['growth_accel'][j] / (df_['growth_rate'][j-14:j]).sum()
-        df_['growth_accel_rate_NORM_(14)'][j] = df_['growth_accel_rate'][j] / (df_['growth_rate'][j-14:j]).sum()
+
+        df_['growth_rate_NORM_(14)'][j] = df_['growth_rate'][j]/(df_['growth_rate'][j-14:j]).sum()
+        df_['growth_accel_NORM_(14)'][j] = df_['growth_accel'][j]/(df_['growth_rate'][j-14:j]).sum()
+        df_['growth_accel_rate_NORM_(14)'][j] = df_['growth_accel_rate'][j] /(df_['growth_rate'][j-14:j]).sum()
 
 
     ####################################################
@@ -219,7 +221,7 @@ for locs in locs_:
     df_ = df_.drop('growth_accel', axis=1)
     df_ = df_.drop('growth_accel_rate', axis=1)
 
- 
+
 
 
 
@@ -244,8 +246,8 @@ for locs in locs_:
 
     # Plot
     if args.show_plot:
-        
-        fig, axes = plt.subplots(1, 4, figsize= (24, 4))    
+
+        fig, axes = plt.subplots(1, 4, figsize= (24, 4))
         axes[0].plot(df_['growth_rate'])
         if args.state_or_city == 'city':
             axes[0].set_title(cities, fontsize= 16)
@@ -310,19 +312,10 @@ for locs in locs_:
         else:
             print('%s data NOT available for %s' % (args.until_date, locs))
 
-    
+
     plt.show()
 
 
 results = pd.DataFrame(results_)
 
 results.to_csv(path_output + '/' + args.output_name)
-
-
-
-
-
-
-
-
-
